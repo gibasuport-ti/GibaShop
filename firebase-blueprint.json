@@ -1,0 +1,59 @@
+{
+  "entities": {
+    "Product": {
+      "title": "Product",
+      "description": "An electronic accessory for sale.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "description": "The name of the accessory." },
+        "description": { "type": "string", "description": "A detailed description." },
+        "price": { "type": "number", "description": "The price in BRL." },
+        "imageUrl": { "type": "string", "format": "uri", "description": "URL of the main product image." },
+        "imageUrls": { "type": "array", "items": { "type": "string" }, "description": "List of additional product image URLs." },
+        "category": { "type": "string", "enum": ["celular", "som", "informatica", "eletronicos", "utilidades", "diversos"], "description": "Main category of the product." },
+        "stock": { "type": "integer", "description": "Available quantity." }
+      },
+      "required": ["name", "price", "category", "imageUrl"]
+    },
+    "Order": {
+      "title": "Order",
+      "description": "A customer purchase request.",
+      "type": "object",
+      "properties": {
+        "customerName": { "type": "string" },
+        "customerEmail": { "type": "string", "format": "email" },
+        "customerPhone": { "type": "string" },
+        "items": { "type": "array" },
+        "total": { "type": "number" },
+        "status": { "type": "string", "enum": ["pending", "completed"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["customerName", "customerEmail", "customerPhone", "items", "total", "status", "createdAt"]
+    },
+    "User": {
+      "title": "User",
+      "description": "Registered customer or admin.",
+      "type": "object",
+      "properties": {
+        "displayName": { "type": "string" },
+        "email": { "type": "string" },
+        "role": { "type": "string", "enum": ["customer", "admin"] }
+      },
+      "required": ["email", "role"]
+    }
+  },
+  "firestore": {
+    "products/{productId}": {
+      "schema": "Product",
+      "description": "Collection of available electronics accessories."
+    },
+    "orders/{orderId}": {
+      "schema": "Order",
+      "description": "Customer orders."
+    },
+    "users/{userId}": {
+      "schema": "User",
+      "description": "User profiles and roles."
+    }
+  }
+}

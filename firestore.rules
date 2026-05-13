@@ -1,0 +1,92 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Helpers ---
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    
+    function isEmailVerified() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isAdmin() {
+      return isEmailVerified() && (
+        request.auth.token.email == 'gibasuporte@gmail.com' ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin')
+      );
+    }
+    
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+    
+    function isValidId(id) { 
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); 
+    }
+
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+
+    // --- Validation Blueprints ---
+    
+    function isValidProductSchema(data) {
+      return data.name is string && data.name.size() > 0 && data.name.size() <= 200 &&
+             data.price is number && data.price >= 0 &&
+             data.imageUrl is string && data.imageUrl.size() < 1000 &&
+             (data.keys().hasAll(['stock']) ? data.stock is int && data.stock >= 0 : true) &&
+             (data.keys().hasAll(['imageUrls']) ? data.imageUrls is list && data.imageUrls.size() <= 10 : true) &&
+             data.category in ['celular', 'som', 'informatica', 'eletronicos', 'utilidades', 'diversos', 'brecho', 'all'];
+    }
+
+    function isValidProductCreate(data) {
+      return isValidProductSchema(data) &&
+             data.authorId == request.auth.uid &&
+             data.createdAt == request.time;
+    }
+
+    function isValidOrder(data) {
+      return data.customerName is string && data.customerName.size() > 0 &&
+             data.items is list && data.items.size() > 0 &&
+             data.total is number && data.total >= 0 &&
+             data.createdAt == request.time;
+    }
+
+    // --- Collection Rules ---
+
+    match /products/{productId} {
+      allow read: if true;
+      allow create: if isAdmin() && isValidId(productId) && isValidProductCreate(incoming());
+      allow update: if isAdmin() && isValidProductSchema(incoming()) && (
+        incoming().diff(existing()).affectedKeys().hasOnly(['name', 'description', 'price', 'category', 'imageUrl', 'imageUrls', 'stock', 'updatedAt']) &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().authorId == existing().authorId
+      ) || (
+        // Action: Purchase/Checkout (Stock decrement only)
+        isSignedIn() &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['stock']) &&
+        incoming().stock is int &&
+        incoming().stock >= 0 &&
+        incoming().stock < existing().stock
+      );
+      allow delete: if isAdmin();
+    }
+
+    match /orders/{orderId} {
+      allow create: if isValidId(orderId) && isValidOrder(incoming());
+      allow read, update, delete: if isAdmin();
+    }
+
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create: if isOwner(userId) && incoming().role == 'user'; // Users can't promote themselves
+      allow update: if (isOwner(userId) && incoming().diff(existing()).affectedKeys().hasOnly(['name', 'avatarUrl'])) || isAdmin();
+    }
+  }
+}
